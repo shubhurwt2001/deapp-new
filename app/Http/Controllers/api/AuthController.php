@@ -79,6 +79,25 @@ class AuthController extends Controller
      *
      * @return \Illuminate\Http\JsonResponse
      */
+    public function licenseKey(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'license_key' => 'required',
+            'hospital_id' => 'required'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['msg' => $validator->errors()->first()], 400);
+        }
+
+        $valid = User::where(['user_type' => 2, 'license_key' => $request->license_key, 'hospital_id' => $request->hospital_id, 'status' => 1])->first();
+
+        if (!$valid) {
+            return response()->json(['msg' => 'Invalid license key'], 400);
+        } else {
+            return response()->json(['msg' => 'Valid license key'], 200);
+        }
+    }
     public function register(Request $request)
     {
         $validator = Validator::make($request->all(), [
