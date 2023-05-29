@@ -25,6 +25,9 @@ Route::post('login', [AuthController::class, 'login']);
 Route::get('regions', [AuthController::class, 'regions']);
 Route::get('hospitals', [AuthController::class, 'hospitals']);
 Route::post('license-key', [AuthController::class, 'licenseKey']);
+Route::post('forget', [AuthController::class, 'forget']);
 
 Route::get('sessions', [SessionController::class, 'sessions']);
 Route::get('steps', [SessionController::class, 'steps']);
+
+Route::get('account', [SessionController::class, 'account']);

@@ -20,7 +20,7 @@ class AuthController extends Controller
     public function regions()
     {
         $regions = Region::where('status', 1)->get();
-        return response()->json(['msg' => 'Regions fetched', 'data' => $regions], 200);
+        return response()->json(['msg' => 'Regions fetched', 'data' => $regions, 'status' => true], 200);
     }
 
     public function hospitals(Request $request)
@@ -30,47 +30,30 @@ class AuthController extends Controller
         } else {
             $hospitals = Hospital::where(['status' => 1])->get();
         }
-        return response()->json(['msg' => 'Hospitals fetched', 'data' => $hospitals], 200);
+        return response()->json(['msg' => 'Hospitals fetched', 'data' => $hospitals, 'status' => true], 200);
     }
     public function login(Request $request)
     {
 
         $validator = Validator::make($request->all(), [
-            'user_type' => 'required',
+            'deapp_id' => 'required',
             'password' => 'required|string|min:6',
         ]);
 
         if ($validator->fails()) {
-            return response()->json(['msg' => $validator->errors()->first()], 400);
+            return response()->json(['msg' => $validator->errors()->first(), 'status' => false], 200);
         }
 
-        if ($request->user_type !== 2) {
-            $validator = Validator::make($request->all(), [
-                'email' => 'required|email',
-            ]);
-
-            if ($validator->fails()) {
-                return response()->json(['msg' => $validator->errors()->first()], 400);
-            }
-
-            $email = $request->email;
-        } else {
-            $validator = Validator::make($request->all(), [
-                'deapp_id' => 'required',
-            ]);
-
-            if ($validator->fails()) {
-                return response()->json(['msg' => $validator->errors()->first()], 400);
-            }
-
-            $user = User::where('deapp_id', $request->deapp_id)->first();
-            if (!$user) {
-                return response()->json(['msg' => 'Unauthorized user'], 401);
-            }
-            $email = $user->email;
+        $user = User::where('deapp_id', $request->deapp_id)->first();
+        if (!$user) {
+            $user = User::where('email', $request->deapp_id)->first();
         }
-        if (!$token = auth()->attempt(['email' => $email, 'password' => $request->password])) {
-            return response()->json(['msg' => 'Unauthorized user'], 401);
+        if (!$user) {
+            return response()->json(['msg' => 'Unauthorized user', 'status' => false], 200);
+        }
+
+        if (!$token = auth()->attempt(['email' => $user->email, 'password' => $request->password])) {
+            return response()->json(['msg' => 'Unauthorized user', 'status' => false], 200);
         }
         return $this->createNewToken($token);
     }
@@ -87,15 +70,15 @@ class AuthController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return response()->json(['msg' => $validator->errors()->first()], 400);
+            return response()->json(['msg' => $validator->errors()->first(), 'status' => false], 200);
         }
 
         $valid = User::where(['user_type' => 2, 'license_key' => $request->license_key, 'hospital_id' => $request->hospital_id, 'status' => 1])->first();
 
         if (!$valid) {
-            return response()->json(['msg' => 'Invalid license key'], 400);
+            return response()->json(['msg' => 'Invalid license key', 'status' => false], 200);
         } else {
-            return response()->json(['msg' => 'Valid license key'], 200);
+            return response()->json(['msg' => 'Valid license key', 'status' => true], 200);
         }
     }
     public function register(Request $request)
@@ -104,31 +87,31 @@ class AuthController extends Controller
             'name' => 'required|string|between:2,100',
             'email' => 'required|string|email|max:100|unique:users',
             'password' => 'required|string|min:6',
-            'region_id' => 'required',
             'user_type' => 'required'
         ]);
         if ($validator->fails()) {
-            return response()->json(['msg' => $validator->errors()->first()], 400);
+            return response()->json(['msg' => $validator->errors()->first(), 'status' => false], 200);
         }
         if ($request->user_type != 3 && $request->user_type != 4) {
-            return response()->json(['msg' => 'Invalid user type'], 400);
+            return response()->json(['msg' => 'Invalid user type', 'status' => false], 200);
         }
 
 
         if ($request->user_type == 3) {
             $validator = Validator::make($request->all(), [
                 'license_key' => 'required',
-                'hospital_id' => 'required'
+                'hospital_id' => 'required',
+                'region_id' => 'required'
             ]);
 
             if ($validator->fails()) {
-                return response()->json(['msg' => $validator->errors()->first()], 400);
+                return response()->json(['msg' => $validator->errors()->first(), 'status' => false], 200);
             }
 
             $valid = User::where(['user_type' => 2, 'license_key' => $request->license_key, 'hospital_id' => $request->hospital_id, 'status' => 1])->first();
 
             if (!$valid) {
-                return response()->json(['msg' => 'Invalid license key'], 400);
+                return response()->json(['msg' => 'Invalid license key', 'status' => false], 200);
             }
         }
         $user = new User();
@@ -161,10 +144,57 @@ class AuthController extends Controller
         }
         return response()->json([
             'msg' => 'User successfully registered',
-            'data' => $user
+            'data' => $user, 'status' => true
         ], 200);
     }
 
+    public function forget(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'type' => 'required',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['msg' => $validator->errors()->first(), 'status' => false], 200);
+        }
+
+        if ($request->type == 'password') {
+
+            $validator = Validator::make($request->all(), [
+                'email' => 'required|email',
+                'deapp_id' => 'required',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json(['msg' => $validator->errors()->first(), 'status' => false], 200);
+            }
+
+            $user = User::where(['email' => $request->email, 'deapp_id' => $request->deapp_id])->first();
+            if (!$user) {
+                return response()->json(['msg' => 'Invalid Email or DeappId', 'status' => false], 200);
+            } else {
+                return response()->json(['msg' => 'Temporary password sent to registered email', 'status' => true], 200);
+            }
+        } else if ($request->type == 'deapp_id') {
+
+            $validator = Validator::make($request->all(), [
+                'email' => 'required|email',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json(['msg' => $validator->errors()->first(), 'status' => false], 200);
+            }
+
+            $user = User::where(['email' => $request->email, 'deapp_id' => $request->deapp_id])->first();
+            if (!$user) {
+                return response()->json(['msg' => 'Invalid DeappId', 'status' => false], 200);
+            } else {
+                return response()->json(['msg' => 'DeappId sent to registered email', 'status' => true], 200);
+            }
+        } else {
+            return response()->json(['msg' => 'Type should be password or deapp_id', 'status' => false], 200);
+        }
+    }
     protected function createNewToken($token)
     {
         return response()->json([
@@ -175,6 +205,7 @@ class AuthController extends Controller
                 'user' => Auth::user()
             ],
             'msg' => 'User loggedin successfully',
+            'status' => true
         ], 200);
     }
 }

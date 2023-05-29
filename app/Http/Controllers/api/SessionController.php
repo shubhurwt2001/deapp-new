@@ -3,13 +3,16 @@
 namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Hospital;
 use App\Models\Session;
 use App\Models\Step;
 use App\Models\User;
 use App\Models\UserSession;
 use App\Models\UserStep;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
+use stdClass;
 
 class SessionController extends Controller
 {
@@ -18,23 +21,15 @@ class SessionController extends Controller
         $this->middleware('jwt.verify');
     }
 
-    public function sessions(Request $request)
+    public function sessions()
     {
-        $validator = Validator::make($request->all(), [
-            'user_id' => 'required',
-        ]);
+        $user = Auth::user();
 
-        if ($validator->fails()) {
-            return response()->json(['msg' => $validator->errors()->first()], 400);
+        if (!$user || $user->status != 1 || $user->user_type == 1) {
+            return response()->json(['msg' => 'Invalid user', 'status' => false], 200);
         }
 
-        $user = User::where(['id' => $request->user_id, 'status' => 1])->first();
-
-        if (!$user || $user->user_type == 1 ||  $user->user_type == 2) {
-            return response()->json(['msg' => 'Invalid user'], 400);
-        }
-
-        $userSessions = UserSession::where(['user_id' => $request->user_id])->get();
+        $userSessions = UserSession::where(['user_id' => $user->id])->get();
         foreach ($userSessions as $userSession) {
             $session = Session::where(['id' => $userSession->session_id])->first();
             if ($session) {
@@ -50,27 +45,27 @@ class SessionController extends Controller
             return $first->order > $second->order;
         });
 
-        return response()->json(['msg' => 'Sessions fetched', 'data' => $sessions], 200);
+        return response()->json(['msg' => 'Sessions fetched', 'data' => $sessions, 'status' => true], 200);
     }
 
     public function steps(Request $request)
     {
+        $user = Auth::user();
         $validator = Validator::make($request->all(), [
-            'user_id' => 'required',
             'session_id' => 'required'
         ]);
 
         if ($validator->fails()) {
-            return response()->json(['msg' => $validator->errors()->first()], 400);
+            return response()->json(['msg' => $validator->errors()->first(), 'status' => false], 200);
         }
 
-        $user = User::where(['id' => $request->user_id, 'status' => 1])->first();
 
-        if (!$user || $user->user_type == 1 ||  $user->user_type == 2) {
-            return response()->json(['msg' => 'Invalid user'], 400);
+
+        if (!$user || $user->user_type == 1 || $user->status != 1) {
+            return response()->json(['msg' => 'Invalid user', 'status' => false], 200);
         }
 
-        $userSteps = UserStep::where(['user_id' => $request->user_id, 'session_id' => $request->session_id])->get();
+        $userSteps = UserStep::where(['user_id' => $user->id, 'session_id' => $request->session_id])->get();
         foreach ($userSteps as $userStep) {
             $session = Step::where(['id' => $userStep->step_id])->first();
             if ($session) {
@@ -87,6 +82,30 @@ class SessionController extends Controller
             return $first->order > $second->order;
         });
 
-        return response()->json(['msg' => 'Steps fetched', 'data' => $steps], 200);
+        return response()->json(['msg' => 'Steps fetched', 'data' => $steps, 'status' => true], 200);
+    }
+
+    public function account()
+    {
+        $user = Auth::user();
+        if (!$user->status) {
+            return response()->json(['msg' => 'Invalid user', 'status' => false], 200);
+        } else {
+            if ($user->user_type === 3 || $user->user_type === 2) {
+                $hospital = Hospital::where('id', $user->hospital_id)->first();
+                unset($hospital->id);
+                unset($hospital->region_id);
+                unset($hospital->status);
+                $user->hospital = $hospital;
+            }
+            unset($user->hospital_id);
+            unset($user->region_id);
+            unset($user->status);
+
+            if ($user->user_type != 1) {
+                $user->watch_time = UserStep::where('user_id', $user->id)->sum('watch_time');
+            }
+            return response()->json(['msg' => 'Steps fetched', 'data' => $user, 'status' => true], 200);
+        }
     }
 }
